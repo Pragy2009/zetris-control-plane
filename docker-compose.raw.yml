@@ -15,11 +15,22 @@ services:
       - /bin/sh
       - -c
     command: |
+      set -e
+      export GIT_TERMINAL_PROMPT=0
+      echo "source-fetch: preparing /src"
+      mkdir -p /src
       if [ -d /src/.git ]; then
+        echo "source-fetch: existing repo found, pulling"
         git -C /src pull --ff-only
       else
-        git clone --depth 1 --branch main https://github.com/Pragy2009/zetris-control-plane.git /src
+        echo "source-fetch: cleaning stale /src contents"
+        find /src -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        echo "source-fetch: cloning public repo"
+        git clone --depth 1 --branch main https://github.com/Pragy2009/zetris-control-plane.git /tmp/ztcp-src
+        cp -a /tmp/ztcp-src/. /src/
+        rm -rf /tmp/ztcp-src
       fi
+      echo "source-fetch: done"
     volumes:
       - ztcp-source:/src
     networks:
