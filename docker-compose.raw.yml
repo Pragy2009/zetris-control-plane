@@ -1,53 +1,29 @@
 name: zetris-control-plane
 
-# RAW PROVIDER VERSION — no Git provider needed.
-# The source-fetch service clones the public repo into the ztcp-source volume.
-# Everything else runs from that volume; state/provisioned/routes are separate
-# persistent volumes, so removing ztcp-source only refreshes code.
+# RAW PROVIDER VERSION — no Git provider and no source-fetch container.
+# control-plane clones the public repo into /app at startup.
+# State, provisioned tenant data, and tenant routes stay in persistent volumes.
 
 services:
-  source-fetch:
-    image: alpine/git:latest
-    restart: "no"
-    # alpine/git has ENTRYPOINT ["git"], so we must override ENTRYPOINT itself.
-    # Otherwise the script below is passed to `git` as arguments and exits 1.
-    entrypoint:
-      - /bin/sh
-      - -c
-    command: |
-      set -e
-      export GIT_TERMINAL_PROMPT=0
-      echo "source-fetch: preparing /src (always fresh clone)"
-      mkdir -p /src
-      rm -rf /tmp/ztcp-src
-      echo "source-fetch: cloning public repo"
-      git clone --depth 1 --branch main https://github.com/Pragy2009/zetris-control-plane.git /tmp/ztcp-src
-      echo "source-fetch: replacing /src contents"
-      find /src -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-      cp -a /tmp/ztcp-src/. /src/
-      rm -rf /tmp/ztcp-src
-      test -f /src/requirements.txt
-      test -f /src/web/app.py
-      echo "source-fetch: done"
-    volumes:
-      - ztcp-source:/src
-    networks:
-      - proxy
-
   tenant-gateway:
     image: caddy:2.8.4-alpine
     restart: unless-stopped
-    depends_on:
-      source-fetch:
-        condition: service_completed_successfully
     entrypoint:
       - /bin/sh
       - -c
       - |
-        cp /src/config/Caddyfile.tenants /etc/caddy/Caddyfile
+        cat > /etc/caddy/Caddyfile <<'EOF'
+        {
+          admin off
+          auto_https off
+          servers :80 {
+            protocols h1 h2c
+          }
+        }
+        import /etc/caddy/tenants/*.caddy
+        EOF
         exec caddy run --config /etc/caddy/Caddyfile
     volumes:
-      - ztcp-source:/src:ro
       - ztcp-routes:/etc/caddy/tenants
     networks:
       - proxy
@@ -63,22 +39,25 @@ services:
   control-plane:
     image: python:3.12-slim
     restart: unless-stopped
-    depends_on:
-      source-fetch:
-        condition: service_completed_successfully
     working_dir: /app
     entrypoint:
       - /bin/sh
       - -c
       - |
+        set -e
+        export GIT_TERMINAL_PROMPT=0
         apt-get update
-        apt-get install -y --no-install-recommends docker.io ca-certificates
+        apt-get install -y --no-install-recommends docker.io git ca-certificates
         rm -rf /var/lib/apt/lists/*
         if [ ! -f /app/requirements.txt ] || [ ! -f /app/web/app.py ]; then
-          echo "control-plane ERROR: source volume is empty; /app contains:"
-          ls -la /app
-          exit 3
+          echo "control-plane: fetching public source"
+          rm -rf /tmp/ztcp-src
+          git clone --depth 1 --branch main https://github.com/Pragy2009/zetris-control-plane.git /tmp/ztcp-src
+          cp -a /tmp/ztcp-src/. /app/
+          rm -rf /tmp/ztcp-src
         fi
+        test -f /app/requirements.txt
+        test -f /app/web/app.py
         pip install --no-cache-dir -r /app/requirements.txt
         if [ "$$ZTCP_APPLY" = "true" ]; then
           exec python -B /app/web/app.py --port 8788 --apply --confirm "$$ZTCP_CONFIRM"
@@ -125,7 +104,6 @@ services:
       ZTCP_REDIS_ADMIN_PASSWORD: ${ZTCP_REDIS_ADMIN_PASSWORD:-}
       ZTCP_ADMIN_TOKEN: ${ZTCP_ADMIN_TOKEN:-}
     volumes:
-      - ztcp-source:/app
       - ztcp-state:/app/state
       - ztcp-provisioned:/app/provisioned
       - /var/run/docker.sock:/var/run/docker.sock
@@ -148,7 +126,6 @@ services:
       retries: 5
 
 volumes:
-  ztcp-source:
   ztcp-state:
   ztcp-provisioned:
   ztcp-routes:
