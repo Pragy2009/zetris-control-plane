@@ -9,15 +9,17 @@ services:
   source-fetch:
     image: alpine/git:latest
     restart: "no"
-    command:
+    # alpine/git has ENTRYPOINT ["git"], so we must override ENTRYPOINT itself.
+    # Otherwise the script below is passed to `git` as arguments and exits 1.
+    entrypoint:
       - /bin/sh
       - -c
-      - |
-        if [ -d /src/.git ]; then
-          git -C /src pull --ff-only
-        else
-          git clone --depth 1 --branch main https://github.com/Pragy2009/zetris-control-plane.git /src
-        fi
+    command: |
+      if [ -d /src/.git ]; then
+        git -C /src pull --ff-only
+      else
+        git clone --depth 1 --branch main https://github.com/Pragy2009/zetris-control-plane.git /src
+      fi
     volumes:
       - ztcp-source:/src
     networks:
