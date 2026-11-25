@@ -17,19 +17,17 @@ services:
     command: |
       set -e
       export GIT_TERMINAL_PROMPT=0
-      echo "source-fetch: preparing /src"
+      echo "source-fetch: preparing /src (always fresh clone)"
       mkdir -p /src
-      if [ -d /src/.git ]; then
-        echo "source-fetch: existing repo found, pulling"
-        git -C /src pull --ff-only
-      else
-        echo "source-fetch: cleaning stale /src contents"
-        find /src -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-        echo "source-fetch: cloning public repo"
-        git clone --depth 1 --branch main https://github.com/Pragy2009/zetris-control-plane.git /tmp/ztcp-src
-        cp -a /tmp/ztcp-src/. /src/
-        rm -rf /tmp/ztcp-src
-      fi
+      rm -rf /tmp/ztcp-src
+      echo "source-fetch: cloning public repo"
+      git clone --depth 1 --branch main https://github.com/Pragy2009/zetris-control-plane.git /tmp/ztcp-src
+      echo "source-fetch: replacing /src contents"
+      find /src -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+      cp -a /tmp/ztcp-src/. /src/
+      rm -rf /tmp/ztcp-src
+      test -f /src/requirements.txt
+      test -f /src/web/app.py
       echo "source-fetch: done"
     volumes:
       - ztcp-source:/src
@@ -76,6 +74,11 @@ services:
         apt-get update
         apt-get install -y --no-install-recommends docker.io ca-certificates
         rm -rf /var/lib/apt/lists/*
+        if [ ! -f /app/requirements.txt ] || [ ! -f /app/web/app.py ]; then
+          echo "control-plane ERROR: source volume is empty; /app contains:"
+          ls -la /app
+          exit 3
+        fi
         pip install --no-cache-dir -r /app/requirements.txt
         if [ "$$ZTCP_APPLY" = "true" ]; then
           exec python -B /app/web/app.py --port 8788 --apply --confirm "$$ZTCP_CONFIRM"
