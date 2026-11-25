@@ -20,6 +20,7 @@ from pathlib import Path
 from . import registry as reg
 from . import render as rnd
 from . import steps as stp
+from . import tokens as tenant_tokens
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REGISTRY = ROOT / "config/registry.local.json"
@@ -37,6 +38,10 @@ def build_context(args, tenant, ext):
             name = config.get(section, {}).get("password_env") or config.get(section, {}).get("admin_token_env")
             if name:
                 secrets_map[name] = os.environ.get(name, "")
+        admin_token_env = config.get("netbird", {}).get("admin_token_env", "ZTCP_ADMIN_TOKEN")
+        stored = tenant_tokens.load(tenant["id"])
+        if stored:
+            secrets_map[admin_token_env] = stored
         missing = [name for name, value in secrets_map.items()
                    if name in tenant["secret_refs"].values() and len(value) < 24]
         if missing:

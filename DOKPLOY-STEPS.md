@@ -34,8 +34,15 @@ to shadow. Do not flip anything silently.
 
 ---
 
-## 1. Push the code (me, after you confirm the remote)
-- Only your own repo/fork, never the lead's repo.
+## 1. Code repository (confirmed)
+- Repo: **https://github.com/Pragy2009/zetris-control-plane.git** (your own repo).
+- The repo root IS the module: `docker-compose.control-plane.yml` and
+  `Dockerfile` are at the ROOT, not inside a `tenant-control-plane/` subfolder.
+- For Git provider use: **`docker-compose.control-plane.yml`**.
+- For **Raw provider** (GitHub repo not visible) paste **`docker-compose.raw.yml`**.
+  It clones the public repo into `ztcp-source` on the server, so no Git provider
+  is needed. Keep `ZTCP_APPLY=false` for the first deploy.
+- Never push to the lead's repo. This repo is yours only.
 - The module is self-contained: `vendor/` contains the read-only renderers.
 - `.dockerignore` excludes generated keys/state/test temp folders.
 
@@ -52,9 +59,9 @@ to shadow. Do not flip anything silently.
    - `ZTCP_PUBLIC_HOST` — e.g. `portal.ztna.sc.deeptrustxai.com`.
    - `ZTCP_DOMAIN` — e.g. `ztna.sc.deeptrustxai.com`.
    - `ZTCP_TRAEFIK_NETWORK` — answer from section 0 (default `dokploy-network`).
-   - `ZTCP_EDGE_HOST` — the edge container/service name from section 0
-     (default `zetris-single-node-edge-1`); it is the shared router on ports
-     8081/8082/8083.
+   - `ZTCP_EDGE_HOST` — shared edge router, default
+     `ztna-zetrissinglenode-fcrups-edge-1` (confirmed container name); it
+     routes ports 8081/8082/8083.
    - `ZTCP_GATEWAY_CONTAINER` and `ZTCP_ROUTE_VOLUME` — can stay at their
      defaults; they are created by this compose as `tenant-gateway`.
    - `PGPASSWORD`, `ZTCP_KEYCLOAK_ADMIN_PASSWORD`, `ZTCP_CH_ADMIN_PASSWORD`,

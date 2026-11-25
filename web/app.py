@@ -34,6 +34,7 @@ from control import secrets as sec        # noqa: E402
 from control import users as usr          # noqa: E402
 from control import apps as appctl        # noqa: E402
 from control import toggles as tog        # noqa: E402
+from control import tokens as tenant_tokens  # noqa: E402
 
 STATE = ROOT / "state"
 REGISTRY = ROOT / "config/registry.local.json"
@@ -198,6 +199,10 @@ class Service:
                 name = config.get(section, {}).get("password_env") or config.get(section, {}).get("admin_token_env")
                 if name:
                     secrets_map[name] = os.environ.get(name, "")
+            admin_token_env = config.get("netbird", {}).get("admin_token_env", "ZTCP_ADMIN_TOKEN")
+            stored = tenant_tokens.load(slug)
+            if stored:
+                secrets_map[admin_token_env] = stored
             mode, token = "apply", self.confirm
         else:
             secrets_map = rnd.ephemeral_environ(tenant)

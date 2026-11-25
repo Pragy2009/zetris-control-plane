@@ -16,6 +16,7 @@ import subprocess
 from typing import Callable
 
 from . import registry as reg
+from . import tokens as tenant_tokens
 from .render import private_write
 
 MODULE_ROOT = Path(__file__).resolve().parents[1]
@@ -221,6 +222,7 @@ def step_netbird_bootstrap(ctx: Context):
         if not pat:
             raise StepError("NetBird setup returned no automation token")
         ctx.secrets[admin_token_env] = pat
+        tenant_tokens.save(ctx.tenant["id"], pat)
     admin_token = ctx.secrets.get(admin_token_env, "")
     provider.configure(ctx.tenant, ctx.origin, admin_token,
                        ctx.secrets[prefix + "KEYCLOAK_SECRET"], request)

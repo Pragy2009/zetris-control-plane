@@ -234,5 +234,26 @@ class FinalSliceTests(unittest.TestCase):
         self.assertTrue(all(item["status"] == "pass" for item in results), results)
 
 
+class TokenStorageTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(dir=ROOT)
+        self.addCleanup(self.tmp.cleanup)
+        self.old = None
+
+    def test_save_load_forget(self):
+        from control import tokens
+        old_folder = tokens.FOLDER
+        tokens.FOLDER = Path(self.tmp.name) / "admin_tokens"
+        try:
+            self.assertEqual(tokens.load("acme"), "")
+            target = tokens.save("acme", "preview-token-value")
+            self.assertTrue(target.is_file())
+            self.assertEqual(tokens.load("acme"), "preview-token-value")
+            tokens.forget("acme")
+            self.assertEqual(tokens.load("acme"), "")
+        finally:
+            tokens.FOLDER = old_folder
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

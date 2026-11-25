@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import registry as reg
 from .steps import Context, StepError, _token_request
+from . import tokens as tenant_tokens
 
 PLANES = ("netbird", "audit", "access-gateway", "access-connector")
 
@@ -85,5 +86,6 @@ def delete(ctx: Context):
         if target == root or root not in target.parents:
             raise StepError("Refusing to remove an output outside the control-plane folder")
         shutil.rmtree(target)
+        tenant_tokens.forget(ctx.tenant["id"])
     return {"status": "deleted" if ctx.runner.mode == "apply" else "deletion planned",
             "planes": [plane for plane, _ in files]}

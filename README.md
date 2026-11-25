@@ -1,7 +1,10 @@
 # tenant-control-plane — the missing piece (local module)
 
-Created Nov 20, 2026. This folder is the **only** place this part of the project
-is built. It never writes to your lead's repo; it only *reads* his scripts from
+Created Nov 20, 2026. Deployed from your own repo:
+**https://github.com/Pragy2009/zetris-control-plane.git** (repo root = this
+module; compose file = `docker-compose.control-plane.yml`).
+
+This folder is the **only** place this part of the project is built. It never writes to your lead's repo; it only *reads* his scripts from
 `..\zetris-views` (configured in `control/registry.py:ZETRIS_DEFAULT`).
 
 ## Assumptions (since you said "any other questions?" — none were blocking)
@@ -33,7 +36,8 @@ is built. It never writes to your lead's repo; it only *reads* his scripts from
 | `tests/` | **22 local tests — all passing** (registry, render, steps, lifecycle, invites, apps, auth, signup/tier walls, handoff/tenant portal, isolation) |
 | `provisioned/canary/` | Rendered preview artifacts (throwaway keys; git-ignored) |
 | **`Dockerfile`** | Dokploy build: Python 3.12 + Docker CLI + pinned dependencies |
-| **`docker-compose.control-plane.yml`** | Dokploy-ready: Traefik TLS labels, persistent volumes, healthcheck, operator auth, guarded apply |
+| **`docker-compose.control-plane.yml`** | Dokploy Git-provider compose: Traefik TLS labels, persistent volumes, healthcheck, operator auth, guarded apply |
+| **`docker-compose.raw.yml`** | Dokploy Raw-provider compose: clones the public repo into a volume, no GitHub App needed |
 | `docker-compose.preview.yml` | Local preview CLI + web service; no live dependencies |
 
 ## Verified locally (basic commands only)
