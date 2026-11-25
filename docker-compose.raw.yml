@@ -29,11 +29,25 @@ services:
       - proxy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.ztcp-tenants.rule=HostRegexp(`{subdomain:[a-z0-9-]+}.${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com}`)
-      - traefik.http.routers.ztcp-tenants.entrypoints=websecure
-      - traefik.http.routers.ztcp-tenants.tls=true
-      - traefik.http.routers.ztcp-tenants.tls.certresolver=letsencrypt
-      - traefik.http.routers.ztcp-tenants.priority=10000
+      # Match ONLY tenant doors. `portal.<domain>` must never match here.
+      - traefik.http.routers.ztcp-app.rule=HostRegexp(`{tenant:[a-z0-9-]+-app}.${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com}`)
+      - traefik.http.routers.ztcp-app.entrypoints=websecure
+      - traefik.http.routers.ztcp-app.tls=true
+      - traefik.http.routers.ztcp-app.tls.certresolver=letsencrypt
+      - traefik.http.routers.ztcp-app.priority=10000
+      - traefik.http.routers.ztcp-app.service=ztcp-tenants
+      - traefik.http.routers.ztcp-audit.rule=HostRegexp(`{tenant:[a-z0-9-]+-audit}.${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com}`)
+      - traefik.http.routers.ztcp-audit.entrypoints=websecure
+      - traefik.http.routers.ztcp-audit.tls=true
+      - traefik.http.routers.ztcp-audit.tls.certresolver=letsencrypt
+      - traefik.http.routers.ztcp-audit.priority=10000
+      - traefik.http.routers.ztcp-audit.service=ztcp-tenants
+      - traefik.http.routers.ztcp-netbird.rule=HostRegexp(`{tenant:[a-z0-9-]+-netbird}.${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com}`)
+      - traefik.http.routers.ztcp-netbird.entrypoints=websecure
+      - traefik.http.routers.ztcp-netbird.tls=true
+      - traefik.http.routers.ztcp-netbird.tls.certresolver=letsencrypt
+      - traefik.http.routers.ztcp-netbird.priority=10000
+      - traefik.http.routers.ztcp-netbird.service=ztcp-tenants
       - traefik.http.services.ztcp-tenants.loadbalancer.server.port=80
 
   control-plane:
