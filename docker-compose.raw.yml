@@ -136,6 +136,7 @@ services:
       - traefik.http.routers.ztcp.entrypoints=websecure
       - traefik.http.routers.ztcp.tls=true
       - traefik.http.routers.ztcp.tls.certresolver=letsencrypt
+      - traefik.http.routers.ztcp.priority=20000
       - traefik.http.services.ztcp.loadbalancer.server.port=8788
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/healthz', timeout=3)"]
