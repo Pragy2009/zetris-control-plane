@@ -1,0 +1,37 @@
+{
+  "tenant_domain": "ztna.local.test",
+  "keycloak": {
+    "origin": "https://auth.ztna.sc.deeptrustxai.com",
+    "admin_realm": "master",
+    "admin_user": "admin",
+    "admin_password_env": "ZTCP_KEYCLOAK_ADMIN_PASSWORD"
+  },
+  "postgres": {
+    "host": "ztna-zetrissinglenode-fcrups-postgres-1",
+    "port": 5432,
+    "admin_user": "admin",
+    "password_env": "PGPASSWORD",
+    "sslmode": "verify-full",
+    "container_host": "postgres",
+    "base_hba_file": "/etc/postgresql/base.conf",
+    "managed_hba_file": "/etc/postgresql/pg_hba.conf"
+  },
+  "database_network": "ztna-zetrissinglenode-fcrups_netbird-db",
+  "trusted_proxies": ["10.253.245.2/32"],
+  "clickhouse": {"origin": "https://ztna-zetrissinglenode-fcrups-clickhouse-1:8443", "admin_user": "default", "password_env": "ZTCP_CH_ADMIN_PASSWORD"},
+  "redis": {"host": "ztna-zetrissinglenode-fcrups-redis-1", "port": 6380, "admin_user": "default", "password_env": "ZTCP_REDIS_ADMIN_PASSWORD"},
+  "netbird": {"admin_token_env": "ZTCP_ADMIN_TOKEN"},
+  "api_network": "ztna-zetrissinglenode-fcrups_access",
+  "backend_network": "ztna-zetrissinglenode-fcrups_data",
+  "policy_volume": "ztna-zetrissinglenode-fcrups_policies",
+  "gateway_ip": "100.64.0.10",
+  "edge_host": "zetris-single-node-edge-1",
+  "route_volume": "zetris-control-plane_ztcp-routes",
+  "gateway_container": "zetris-control-plane-tenant-gateway-1",
+  "portal_base_url": "http://127.0.0.1:8788",
+  "ca_file": "config/lab-ca.crt",
+  "port_base": 42000,
+  "max_tenants": 100,
+  "lab": true,
+  "note": "Values ending in _env are environment variable NAMES. No secret values belong in this file."
+}

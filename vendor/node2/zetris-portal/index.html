@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zetris Workspace</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.6 system-ui, sans-serif; background: #f2f5fa; color: #1b2940; }
+    header { background: #13233d; color: white; padding: 24px max(24px, calc((100vw - 1060px)/2)); }
+    header p { color: #b8c6dc; margin: 4px 0 0; }
+    h1 { font-size: 22px; margin: 0; letter-spacing: -.5px; }
+    main { max-width: 1108px; margin: 32px auto; padding: 0 24px; }
+    h2 { font-size: 28px; margin: 0 0 8px; }
+    .muted { color: #566781; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .card { background: white; padding: 24px; margin: 20px 0; border: 1px solid #dce3ed; border-radius: 12px; }
+    .card h3 { margin-top: 0; }
+    .tag { display: inline-block; border-radius: 20px; padding: 4px 12px; color: #185c41; background: #e4f5ec; }
+    code { overflow-wrap: anywhere; background: #edf2fa; padding: 3px 8px; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 12px 8px; border-bottom: 1px solid #e4eaf2; }
+    a { color: #225cba; }
+    .button { display: inline-block; padding: 10px 16px; border-radius: 7px; color: white; background: #225cba; text-decoration: none; }
+    footer { margin: 24px 0; font-size: 14px; }
+    @media (max-width: 650px) { .grid { grid-template-columns: 1fr; gap: 0; } h2 { font-size: 23px; } }
+  </style>
+</head>
+<body>
+  <header><h1>Zetris Workspace</h1><p>Your private application workspace · {{HOST}}</p></header>
+  <main>
+    <span class="tag">Authenticated workspace</span>
+    <h2>Welcome, {{USER}}</h2>
+    <p class="muted">Signed in with your organisation’s Keycloak account. Application permissions are checked by the Zetris gateway.</p>
+    <section class="card" aria-label="Your organisation">
+      <strong>Organisation:</strong> <code>{{TENANT}}</code> &nbsp; <strong>Account:</strong> <code>{{USER}}</code>
+    </section>
+    <section class="card">
+      <h3>Workspace documents</h3>
+      <table><thead><tr><th>Document</th><th>Owner</th><th>Status</th></tr></thead>
+      <tbody><tr><td>Project roadmap</td><td>{{USER}}</td><td>Sample document</td></tr>
+      <tr><td>Team handbook</td><td>Workspace team</td><td>Sample document</td></tr></tbody></table>
+      <p class="muted">Demo content for the access-control walkthrough. File storage and downloads are not enabled.</p>
+    </section>
+    <div class="grid">
+      <section class="card"><h3>Developer workspace</h3><p>Open the internal application used by administrators and developers.</p><a class="button" href="/demo/">Open developer app</a></section>
+      <section class="card"><h3>Administration</h3><p>Open the restricted application. The gateway checks your permission when you follow this link.</p><a class="button" href="/dummy/">Open admin app</a></section>
+    </div>
+    <section class="card"><h3>Risk enforcement demonstration</h3><p>Operators can run a bounded simulation with a separate test identity and verify the complete blocking flow.</p><a class="button" href="/juice/simulation">Open simulation</a></section>
+    <footer class="muted">Protected by Zetris · <a href="/signout">Sign out</a></footer>
+  </main>
+</body>
+</html>

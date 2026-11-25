@@ -1,0 +1,19 @@
+# VCS / editor cruft — never ship to the build context
+.git
+.gitignore
+.idea
+.vscode
+*.swp
+*.swo
+
+# Secrets & local config — certs are volume-mounted at runtime, not baked in
+.env
+*.env
+certs/
+*.key
+*.crt
+
+# Build/test artifacts
+opa-sidecar
+*.test
+coverage.out

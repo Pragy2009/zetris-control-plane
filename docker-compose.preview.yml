@@ -1,0 +1,29 @@
+# Preview only — no live services, no secrets. Run from tenant-control-plane/.
+# The lead's tree is mounted READ-ONLY; writing happens only in ./provisioned.
+name: ztcp-preview
+
+services:
+  preview:
+    image: python:3.12-slim
+    working_dir: /work
+    environment:
+      ZETRIS_ROOT: /zetris-views
+    volumes:
+      - .:/work
+      - ../zetris-views:/zetris-views:ro
+    # The literal "sh" after -c becomes $0, so every passed argument stays in $@.
+    entrypoint: ["sh", "-c", "pip install --quiet -r requirements.txt && exec python -B -m control.cli \"$@\"", "sh"]
+    command: ["validate"]
+
+  web:
+    image: python:3.12-slim
+    working_dir: /work
+    environment:
+      ZETRIS_ROOT: /zetris-views
+    ports:
+      - "127.0.0.1:8788:8788"
+    volumes:
+      - .:/work
+      - ../zetris-views:/zetris-views:ro
+    entrypoint: ["sh", "-c", "pip install --quiet -r requirements.txt && exec python -B web/app.py \"$@\"", "sh"]
+    command: ["--port", "8788"]

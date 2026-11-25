@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package trust.v1;
+
+option go_package = "github.com/ztna/app-connector/opa-sidecar/gen/trust/v1;trustv1";
+
+// TrustIngest is a read-mostly trust-state service. IngestEvents was removed
+// at M2: the risk-engine is the single Redis writer, so this service only
+// serves LookupScore.
+
+message LookupScoreRequest {
+  string session_id = 1;
+  string tenant_id = 2;
+  string user_id = 3;
+}
+
+message LookupScoreResponse {
+  string session_id = 1;
+  int32 score = 2;
+  bool blocked = 3;
+  string user_id = 4;
+  int64 last_negative_at = 5;
+  string last_source = 6;
+  string last_alert_type = 7;
+  // M2 additions — written by the risk-engine. Empty when the session has
+  // never been scored by the risk-engine (or lazy-init 100).
+  string risk_level = 8;      // LOW | MEDIUM | HIGH | CRITICAL
+  string risk_factors = 9;    // JSON: [{"feature":..., "z":..., "contribution":...}]
+  int64 risk_updated_at = 10; // unix ms of the last risk-engine write
+}
+
+service TrustIngest {
+  rpc LookupScore(LookupScoreRequest) returns (LookupScoreResponse);
+}

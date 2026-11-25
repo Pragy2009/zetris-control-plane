@@ -1,0 +1,199 @@
+# zetris-access-policy: v1
+# Rego v0 syntax for the repository's pinned OPA 0.63.0.
+package __PACKAGE__
+
+import future.keywords.every
+
+config := __CONFIG__
+
+permissions := {
+  "workspace": {"view": ["viewer", "developer", "tenant_admin"]},
+  "developer_app": {"view": ["developer", "tenant_admin"]},
+  "admin_console": {"view": ["tenant_admin"]},
+  "diagnostics": {"view": ["platform_operator"]},
+  "file": {"view": ["developer", "tenant_admin"], "download": ["developer", "tenant_admin"]},
+  "document": {"view": ["viewer", "developer", "tenant_admin"], "edit": ["developer", "tenant_admin"], "delete": ["tenant_admin"]},
+  "export": {"export": ["tenant_admin"]},
+  "tenant_users": {"admin": ["tenant_admin"]},
+  "policy": {"admin": ["platform_operator"]},
+  "session": {"unblock": ["tenant_admin"]},
+  "simulation_control": {"manage": ["tenant_admin"]}
+}
+
+valid_contract {
+  input.schema_version == 1
+  input.principal.verified == true
+  is_string(input.principal.subject)
+  input.principal.subject != ""
+  is_string(input.principal.session)
+  input.principal.session != ""
+  input.principal.tenant == config.tenant
+  input.principal.issuer == config.issuer
+  input.principal.role_client == config.role_client
+  input.principal.kind == {"human", "simulator"}[_]
+  is_array(input.principal.roles)
+  every role in input.principal.roles { is_string(role) }
+  is_number(input.now)
+  input.now > 0
+  is_number(input.principal.expires_at)
+  input.principal.expires_at > input.now
+  is_number(input.principal.not_before)
+  input.principal.not_before <= input.now
+  is_number(input.principal.auth_time)
+  is_string(input.principal.acr)
+  input.http.host == config.host
+  input.http.port == "443"
+  input.http.protocol == "tcp"
+  is_string(input.http.path)
+  is_string(input.http.method)
+  is_boolean(input.resource.supported)
+  is_string(input.resource.kind)
+  is_string(input.resource.id)
+  input.resource.id != ""
+  is_string(input.resource.action)
+  input.resource.tenant == config.tenant
+  is_boolean(input.risk.available)
+  is_boolean(input.risk.blocked)
+  input.risk.subject == input.principal.subject
+  input.risk.session == input.principal.session
+  is_number(input.risk.updated_at)
+  input.risk.updated_at >= 0
+  input.risk.updated_at <= input.now + 30
+  is_number(input.risk.score)
+  input.risk.score >= 0
+  input.risk.score <= 100
+  input.risk.level == {"UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"}[_]
+  risk_consistent
+  method_permitted
+}
+
+risk_consistent { input.risk.level == "UNKNOWN"; input.risk.updated_at == 0; input.risk.score == 100 }
+risk_consistent { input.risk.level == "LOW"; input.risk.score >= 70; input.risk.updated_at > 0 }
+risk_consistent { input.risk.level == "MEDIUM"; input.risk.score >= 50; input.risk.score < 70; input.risk.updated_at > 0 }
+risk_consistent { input.risk.level == "HIGH"; input.risk.score >= 25; input.risk.score < 50; input.risk.updated_at > 0 }
+risk_consistent { input.risk.level == "CRITICAL"; input.risk.score < 25; input.risk.updated_at > 0 }
+
+method_permitted { input.resource.action == {"view", "download"}[_]; input.http.method == {"GET", "HEAD"}[_] }
+method_permitted { input.resource.action == "edit"; input.http.method == {"POST", "PUT", "PATCH"}[_] }
+method_permitted { input.resource.action == "delete"; input.http.method == "DELETE" }
+method_permitted { input.resource.action == {"export", "unblock"}[_]; input.http.method == "POST" }
+method_permitted { input.resource.action == "admin"; input.http.method == {"POST", "PUT", "PATCH", "DELETE"}[_] }
+method_permitted { input.resource.action == "manage"; input.http.method == {"GET", "HEAD", "POST"}[_] }
+method_permitted { input.resource.action == "probe"; input.http.method == {"GET", "POST"}[_] }
+
+is_simulator {
+  config.simulator_subject != ""
+  input.principal.subject == config.simulator_subject
+  input.principal.authorized_party == "zetris-risk-simulator"
+  input.principal.username == "service-account-zetris-risk-simulator"
+  input.principal.kind == "simulator"
+}
+
+role_permitted {
+  input.principal.kind == "human"
+  input.principal.subject != config.simulator_subject
+  required := permissions[input.resource.kind][input.resource.action]
+  input.principal.roles[_] == required[_]
+}
+role_permitted {
+  is_simulator
+  input.resource.kind == "simulation_probe"
+  input.resource.action == "probe"
+}
+
+low_impact_read {
+  input.resource.kind == "workspace"
+  input.resource.action == "view"
+}
+low_impact_read {
+  is_simulator
+  input.resource.kind == "simulation_probe"
+}
+
+fresh_risk {
+  input.risk.updated_at > 0
+  input.risk.updated_at <= input.now + 30
+  input.now - input.risk.updated_at <= config.risk_max_age_seconds
+  input.risk.level != "UNKNOWN"
+}
+
+privileged {
+  input.resource.kind == {"admin_console", "diagnostics", "file", "export", "tenant_users", "policy", "session", "simulation_control"}[_]
+}
+privileged {
+  input.resource.kind == "document"
+  input.resource.action == "delete"
+}
+
+recent_mfa {
+  input.principal.acr == config.mfa_acrs[_]
+  input.principal.auth_time > 0
+  input.principal.auth_time <= input.now
+  input.now - input.principal.auth_time <= config.mfa_max_age_seconds
+}
+
+approval_required {
+  input.resource.kind == {"export", "tenant_users", "policy", "session"}[_]
+}
+approval_required {
+  input.resource.kind == "document"
+  input.resource.action == "delete"
+}
+
+valid_approval {
+  input.approval.verified == true
+  input.approval.id != ""
+  input.approval.tenant == input.principal.tenant
+  input.approval.subject == input.principal.subject
+  input.approval.session == input.principal.session
+  input.approval.resource == input.resource.id
+  input.approval.action == input.resource.action
+  input.approval.approved_by != ""
+  input.approval.approved_by != input.principal.subject
+  input.approval.issued_at <= input.now
+  input.approval.expires_at > input.now
+  input.approval.expires_at - input.approval.issued_at <= 300
+}
+
+object_permitted {
+  input.resource.kind != "document"
+}
+object_permitted {
+  input.resource.kind == "document"
+  input.resource.owner_subject == input.principal.subject
+}
+object_permitted {
+  input.resource.kind == "document"
+  input.principal.roles[_] == "tenant_admin"
+}
+
+violations["invalid_or_untrusted_context"] { not valid_contract }
+violations["unsupported_resource_or_action"] { not input.resource.supported }
+violations["permission_denied"] { not role_permitted }
+violations["object_access_denied"] { not object_permitted }
+violations["risk_service_unavailable"] { input.risk.available != true }
+violations["session_blocked"] { input.risk.blocked == true }
+violations["critical_risk"] { input.risk.level == "CRITICAL" }
+violations["fresh_risk_required"] { not low_impact_read; not fresh_risk }
+violations["high_risk_restricted"] { not low_impact_read; input.risk.level == "HIGH" }
+violations["low_risk_required"] { privileged; input.risk.level != "LOW" }
+violations["recent_mfa_required"] { privileged; not recent_mfa }
+violations["bound_approval_required"] { approval_required; not valid_approval }
+
+default allow = false
+allow { count(violations) == 0 }
+
+__APPLICATION_LAYER__
+
+decision := {
+  "allow": allow,
+  "action": decision_action,
+  "reasons": sort([reason | reason := violations[_]]),
+  "policy_version": config.version,
+  "application_id": selected_application_id,
+  "access_rule_id": selected_access_rule_id,
+  "timeout_rule_id": selected_timeout_rule_id,
+  "session_constraints": session_constraints,
+  "decision_valid_until": application_valid_until,
+  "trace": application_trace
+}

@@ -1,0 +1,9 @@
+.git
+__pycache__
+*.pyc
+provisioned/
+state/
+tmp*/
+tests/
+*.md
+docker-compose.preview.yml

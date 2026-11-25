@@ -1,0 +1,65 @@
+services:
+  # UI dashboard
+  dashboard:
+    image: netbirdio/dashboard:latest
+    container_name: netbird-dashboard
+    restart: unless-stopped
+    networks: [netbird, n1-control]
+    dns:
+      - 127.0.0.11
+      - 10.24.0.193
+      - 10.24.0.194
+    dns_opt:
+      - ndots:0
+    ports:
+      - '127.0.0.1:8080:80'
+    env_file:
+      - ./dashboard.env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "500m"
+        max-file: "2"
+
+  # Combined server (Management + Signal + Relay + STUN)
+  netbird-server:
+    image: netbirdio/netbird-server:latest
+    container_name: netbird-server
+    restart: unless-stopped
+    networks: [netbird, n1-control]
+    dns:
+      - 127.0.0.11
+      - 10.24.0.193
+      - 10.24.0.194
+    dns_opt:
+      - ndots:0
+    extra_hosts:
+      - "auth.ztnaiitm.me:172.31.37.255"
+      - "netbird.ztnaiitm.me:host-gateway"
+      - "pkgs.netbird.io:213.163.198.51" #REMOVE this when prod, hotfix for dns issue
+    ports:
+      - '127.0.0.1:8081:80'
+      - '3478:3478/udp'
+    environment:
+      - NB_STORE_ENGINE=postgres
+      - NB_STORE_ENGINE_POSTGRES_DSN=host=n1-postgres port=5432 user=admin password=${POSTGRES_PASSWORD} dbname=netbird sslmode=disable
+      - NB_ACTIVITY_EVENT_STORE_ENGINE=postgres
+      - NB_ACTIVITY_EVENT_POSTGRES_DSN=host=n1-postgres port=5432 user=admin password=${POSTGRES_PASSWORD} dbname=netbird sslmode=disable
+      - NB_DISABLE_GEOLOCATION=true
+    volumes:
+      - netbird_data:/var/lib/netbird
+      - ./config.yaml:/etc/netbird/config.yaml
+    command: ["--config", "/etc/netbird/config.yaml"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "500m"
+        max-file: "2"
+
+volumes:
+  netbird_data:
+
+networks:
+  netbird:
+  n1-control:
+    external: true

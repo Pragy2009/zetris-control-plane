@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "tenants": [
+    {
+      "id": "seed",
+      "realm": "seed",
+      "issuer": "https://auth.ztna.local.test/realms/seed",
+      "netbird_stack": "ztcp-seed",
+      "netbird_oidc_client_id": "zetris-netbird",
+      "netbird_hostname": "seed-netbird.ztna.local.test",
+      "netbird_database": "nb_seed",
+      "netbird_database_role": "nb_seed_service",
+      "dashboard_port": 42000,
+      "management_port": 42001,
+      "audit_port": 42002,
+      "stun_port": 42003,
+      "gateway_id": "control-seed",
+      "connector_id": "connector-seed",
+      "connector_oidc_client_id": "node2-app-connector",
+      "application_host": "seed-app.ztna.local.test",
+      "audit_hostname": "seed-audit.ztna.local.test",
+      "audit_oidc_client_id": "zetris-audit-seed",
+      "policy_file": "seed.rego",
+      "telemetry_user": "ingest_seed",
+      "secret_refs": {
+        "database_password": "env:ZTCP_SEED_DB_PASSWORD",
+        "netbird_auth_secret": "env:ZTCP_SEED_AUTH_SECRET",
+        "keycloak_client_secret": "env:ZTCP_SEED_KEYCLOAK_SECRET",
+        "gateway_setup_key": "env:ZTCP_SEED_GATEWAY_SETUP_KEY",
+        "connector_setup_key": "env:ZTCP_SEED_CONNECTOR_SETUP_KEY",
+        "connector_client_secret": "env:ZTCP_SEED_CONNECTOR_CLIENT_SECRET",
+        "connector_hmac_secret": "env:ZTCP_SEED_CONNECTOR_HMAC_SECRET",
+        "telemetry_password": "env:ZTCP_SEED_TELEMETRY_PASSWORD",
+        "audit_clickhouse_password": "env:ZTCP_SEED_AUDIT_CH_PASSWORD",
+        "audit_redis_password": "env:ZTCP_SEED_AUDIT_REDIS_PASSWORD",
+        "audit_client_secret": "env:ZTCP_SEED_AUDIT_CLIENT_SECRET"
+      }
+    },
+    {
+      "id": "canary",
+      "realm": "canary",
+      "issuer": "https://auth.ztna.local.test/realms/canary",
+      "netbird_stack": "ztcp-canary",
+      "netbird_oidc_client_id": "zetris-netbird",
+      "netbird_hostname": "canary-netbird.ztna.local.test",
+      "netbird_database": "nb_canary",
+      "netbird_database_role": "nb_canary_service",
+      "dashboard_port": 42004,
+      "management_port": 42005,
+      "audit_port": 42006,
+      "stun_port": 42007,
+      "gateway_id": "control-canary",
+      "connector_id": "connector-canary",
+      "connector_oidc_client_id": "node2-app-connector",
+      "application_host": "canary-app.ztna.local.test",
+      "audit_hostname": "canary-audit.ztna.local.test",
+      "audit_oidc_client_id": "zetris-audit-canary",
+      "policy_file": "canary.rego",
+      "telemetry_user": "ingest_canary",
+      "secret_refs": {
+        "database_password": "env:ZTCP_CANARY_DB_PASSWORD",
+        "netbird_auth_secret": "env:ZTCP_CANARY_AUTH_SECRET",
+        "keycloak_client_secret": "env:ZTCP_CANARY_KEYCLOAK_SECRET",
+        "gateway_setup_key": "env:ZTCP_CANARY_GATEWAY_SETUP_KEY",
+        "connector_setup_key": "env:ZTCP_CANARY_CONNECTOR_SETUP_KEY",
+        "connector_client_secret": "env:ZTCP_CANARY_CONNECTOR_CLIENT_SECRET",
+        "connector_hmac_secret": "env:ZTCP_CANARY_CONNECTOR_HMAC_SECRET",
+        "telemetry_password": "env:ZTCP_CANARY_TELEMETRY_PASSWORD",
+        "audit_clickhouse_password": "env:ZTCP_CANARY_AUDIT_CH_PASSWORD",
+        "audit_redis_password": "env:ZTCP_CANARY_AUDIT_REDIS_PASSWORD",
+        "audit_client_secret": "env:ZTCP_CANARY_AUDIT_CLIENT_SECRET"
+      }
+    }
+  ],
+  "tenant_ext": {
+    "seed": {
+      "tier": "free",
+      "domain": "ztna.local.test",
+      "admin_email": "admin@seed.test",
+      "features": {
+        "audit_explorer": true,
+        "risk_writes": false,
+        "block_on_critical": false,
+        "netbird_posture": false,
+        "falco": false
+      },
+      "applications_document": "config/applications.free.json",
+      "description": "seed"
+    },
+    "canary": {
+      "tier": "free",
+      "domain": "ztna.local.test",
+      "admin_email": "admin@canary.test",
+      "features": {
+        "audit_explorer": true,
+        "risk_writes": false,
+        "block_on_critical": false,
+        "netbird_posture": false,
+        "falco": false
+      },
+      "applications_document": "config/applications.free.json",
+      "description": "signup"
+    }
+  }
+}

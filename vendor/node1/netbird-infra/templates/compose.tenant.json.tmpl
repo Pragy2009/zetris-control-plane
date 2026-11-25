@@ -1,0 +1,33 @@
+{
+  "name": "${STACK}",
+  "services": {
+    "server": {
+      "image": "${SERVER_IMAGE}",
+      "restart": "unless-stopped",
+      "command": ["--config", "/etc/netbird/server.json"],
+      "environment": {"NB_SETUP_PAT_ENABLED": "${BOOTSTRAP}"},
+      "ports": ["127.0.0.1:${MANAGEMENT_PORT}:80", "${UDP_BIND}:${STUN_PORT}:${STUN_PORT}/udp"],
+      "volumes": ["./server.json:/etc/netbird/server.json:ro", "data:/var/lib/netbird"],
+      "networks": {"tenant": {"aliases": ["${STACK}-server"]}, "database": {"aliases": ["${STACK}-server"]}},
+      "healthcheck": {
+        "test": ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/80 && printf 'GET /oauth2/.well-known/openid-configuration HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && IFS= read -r status <&3 && [[ $$status == *' 200 '* ]]"],
+        "interval": "5s", "timeout": "3s", "retries": 20
+      },
+      "logging": {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}
+    },
+    "dashboard": {
+      "image": "${DASHBOARD_IMAGE}",
+      "restart": "unless-stopped",
+      "ports": ["127.0.0.1:${DASHBOARD_PORT}:80"],
+      "env_file": ["./dashboard.env"],
+      "networks": ["tenant"],
+      "depends_on": {"server": {"condition": "service_healthy"}},
+      "logging": {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}
+    }
+  },
+  "volumes": {"data": {"name": "${STACK}-data"}},
+  "networks": {
+    "tenant": {"name": "${STACK}-network", "driver": "bridge"},
+    "database": {"external": true, "name": "${DATABASE_NETWORK}"}
+  }
+}

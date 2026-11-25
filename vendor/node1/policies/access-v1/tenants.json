@@ -1,0 +1,14 @@
+{
+  "ztna": {
+    "host": "app.ztna.sc.deeptrustxai.com",
+    "issuer": "https://auth.ztna.sc.deeptrustxai.com/realms/ztna",
+    "role_client": "node2-app-connector",
+    "simulator_subject": ""
+  },
+  "ztna-tenant-2": {
+    "host": "tenant2-app.ztna.sc.deeptrustxai.com",
+    "issuer": "https://auth.ztna.sc.deeptrustxai.com/realms/ztna-tenant-2",
+    "role_client": "node2-app-connector",
+    "simulator_subject": ""
+  }
+}

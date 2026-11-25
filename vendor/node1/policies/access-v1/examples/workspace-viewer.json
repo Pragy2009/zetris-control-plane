@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "now": 2000000000,
+  "principal": {
+    "verified": true,
+    "subject": "user-1",
+    "session": "session-1",
+    "tenant": "ztna",
+    "issuer": "https://auth.ztna.sc.deeptrustxai.com/realms/ztna",
+    "role_client": "node2-app-connector",
+    "roles": [
+      "viewer"
+    ],
+    "kind": "human",
+    "username": "alice",
+    "authorized_party": "node2-app-connector",
+    "expires_at": 2000003600,
+    "not_before": 0,
+    "issued_at": 1999999970,
+    "auth_time": 1999999970,
+    "acr": "urn:zetris:acr:mfa"
+  },
+  "http": {
+    "host": "app.ztna.sc.deeptrustxai.com",
+    "port": "443",
+    "protocol": "tcp",
+    "method": "GET",
+    "path": "/juice/"
+  },
+  "resource": {
+    "tenant": "ztna",
+    "id": "workspace",
+    "kind": "workspace",
+    "action": "view",
+    "supported": true,
+    "owner_subject": "user-1"
+  },
+  "risk": {
+    "available": true,
+    "subject": "user-1",
+    "session": "session-1",
+    "score": 100,
+    "level": "LOW",
+    "blocked": false,
+    "updated_at": 1999999990
+  },
+  "approval": {
+    "verified": false
+  },
+  "context": {
+    "source_ip": "100.64.0.10",
+    "client_type": "envoy_http"
+  },
+  "device": {
+    "verified": false
+  }
+}

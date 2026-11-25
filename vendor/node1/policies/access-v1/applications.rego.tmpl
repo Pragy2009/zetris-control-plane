@@ -1,0 +1,117 @@
+# Application authoring layer. Mandatory Zetris violations remain independent.
+application_policy := __APPLICATION_POLICY__
+
+verified_device {
+  input.device.verified == true
+  input.device.tenant == input.principal.tenant
+  input.device.subject == input.principal.subject
+  input.device.session == input.principal.session
+  is_number(input.device.observed_at)
+  input.device.observed_at > 0
+  input.device.observed_at <= input.now
+  is_number(input.device.expires_at)
+  input.device.expires_at > input.now
+}
+
+session_anchor = anchor {
+  input.principal.kind == "human"
+  anchor := input.principal.auth_time
+  anchor > 0
+} else = anchor {
+  input.principal.kind == "simulator"
+  anchor := input.principal.issued_at
+  anchor > 0
+} else = 0
+
+application_selector_matches(selector) { selector.kind == "exact"; input.http.host == selector.value }
+application_selector_matches(selector) { selector.kind == "wildcard"; endswith(input.http.host, selector.value) }
+application_selector_matches(selector) { selector.kind == "cidr"; net.cidr_contains(selector.value, input.http.host) }
+
+application_candidates[candidate] {
+  app := application_policy.applications[_]
+  app.resource_kinds[_] == input.resource.kind
+  app.protocol == input.http.protocol
+  app.ports[_] == to_number(input.http.port)
+  selector := app.selectors[_]
+  application_selector_matches(selector)
+  candidate := {"id":app.id, "rank":selector.rank + 1000 - count(app.ports)}
+}
+application_winners[id] {
+  best := max({c.rank | c := application_candidates[_]})
+  candidate := application_candidates[_]
+  candidate.rank == best
+  id := candidate.id
+}
+selected_application = app {
+  count(application_winners) == 1
+  app := application_policy.applications[_]
+  application_winners[app.id]
+}
+selected_application_id = id { id := selected_application.id } else = "unresolved"
+
+application_targets(rule) { rule.applications[_] == selected_application.id }
+application_targets(rule) { rule.application_groups[_] == selected_application.groups[_] }
+
+selected_access_index = i {
+  matches := {index |
+    rule := application_policy.access_rules[index]
+    rule.enabled
+    application_targets(rule)
+    application_access_condition(index)
+  }
+  i := min(matches)
+} else = -1
+selected_access_rule = application_policy.access_rules[selected_access_index]
+selected_access_rule_id = id { id := selected_access_rule.id } else = "none"
+
+selected_timeout_index = i {
+  matches := {index |
+    rule := application_policy.timeout_rules[index]
+    rule.enabled
+    application_targets(rule)
+    application_timeout_condition(index)
+  }
+  i := min(matches)
+} else = -1
+selected_timeout_rule_id = id { id := application_policy.timeout_rules[selected_timeout_index].id } else = "default"
+session_constraints = limits { limits := application_policy.timeout_rules[selected_timeout_index].timeouts } else = application_policy.default_timeouts
+
+application_access_result(i) = "disabled" { not application_policy.access_rules[i].enabled
+} else = "different_application" { not application_targets(application_policy.access_rules[i])
+} else = "conditions_not_met" { not application_access_condition(i)
+} else = "matched" { selected_access_index == i
+} else = "not_reached"
+application_timeout_result(i) = "disabled" { not application_policy.timeout_rules[i].enabled
+} else = "different_application" { not application_targets(application_policy.timeout_rules[i])
+} else = "conditions_not_met" { not application_timeout_condition(i)
+} else = "matched" { selected_timeout_index == i
+} else = "not_reached"
+
+application_access_trace := [{"stage":"access", "rule":rule.id, "priority":rule.priority, "result":application_access_result(i), "conditions":application_access_condition_trace(i)} | rule := application_policy.access_rules[i]]
+application_timeout_trace := [{"stage":"timeout", "rule":rule.id, "priority":rule.priority, "result":application_timeout_result(i), "conditions":application_timeout_condition_trace(i)} | rule := application_policy.timeout_rules[i]]
+application_trace := array.concat(application_access_trace, application_timeout_trace)
+
+violations["unknown_application"] { count(application_winners) == 0 }
+violations["ambiguous_application"] { count(application_winners) > 1 }
+violations["application_access_denied"] { not selected_access_rule.action == "allow" }
+violations["reauthentication_required"] { session_anchor <= 0 }
+violations["reauthentication_required"] { session_anchor > input.now }
+violations["reauthentication_required"] { input.now - session_anchor >= session_constraints.reauth_seconds }
+violations["maximum_session_expired"] { input.now - session_anchor >= session_constraints.max_session_seconds }
+
+reauthentication_reasons := {"reauthentication_required", "maximum_session_expired", "recent_mfa_required"}
+decision_action = "allow" { allow
+} else = "reauthenticate" { count(violations) > 0; count(violations - reauthentication_reasons) == 0
+} else = "deny"
+
+# Advisory re-evaluation bound only. Every request still rechecks live risk.
+# Includes temporal conditions in earlier, currently unmatched rules as well.
+application_recheck_deadlines[d] { d := input.principal.expires_at }
+application_recheck_deadlines[d] { d := session_anchor + session_constraints.reauth_seconds }
+application_recheck_deadlines[d] { d := session_anchor + session_constraints.max_session_seconds }
+application_recheck_deadlines[d] { d := application_context_deadlines[_] }
+application_recheck_deadlines[d] { not low_impact_read; d := input.risk.updated_at + config.risk_max_age_seconds }
+application_recheck_deadlines[d] { privileged; d := input.principal.auth_time + config.mfa_max_age_seconds }
+application_valid_until = deadline { allow; deadline := min(application_recheck_deadlines) } else = 0
+
+__APPLICATION_CONDITIONS__

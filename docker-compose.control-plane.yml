@@ -1,0 +1,117 @@
+name: zetris-control-plane
+
+services:
+  # Tenant-facing gateway: Traefik routes *.domain here; Caddy hostname blocks
+  # are generated per tenant by the control plane. The lead's edge stack is
+  # left byte-untouched.
+  tenant-gateway:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    volumes:
+      - ./config/Caddyfile.tenants:/etc/caddy/Caddyfile:ro
+      - ztcp-routes:/etc/caddy/tenants
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ztcp-tenants.rule=HostRegexp(`{subdomain:[a-z0-9-]+}.${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com}`)
+      - traefik.http.routers.ztcp-tenants.entrypoints=websecure
+      - traefik.http.routers.ztcp-tenants.tls=true
+      - traefik.http.routers.ztcp-tenants.tls.certresolver=letsencrypt
+      - traefik.http.routers.ztcp-tenants.priority=10000
+      - traefik.http.services.ztcp-tenants.loadbalancer.server.port=80
+
+  control-plane:
+    build: .
+    image: zetris-control-plane:latest
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ "$$ZTCP_APPLY" = "true" ]; then
+          exec python -B web/app.py --port 8788 --apply --confirm "$$ZTCP_CONFIRM"
+        else
+          exec python -B web/app.py --port 8788
+        fi
+    environment:
+      # Public exposure / operator auth. Set these in Dokploy's Environment tab.
+      ZTCP_OPERATOR_TOKEN: ${ZTCP_OPERATOR_TOKEN:?set a 16+ char operator token}
+      ZTCP_PUBLIC_HOST: ${ZTCP_PUBLIC_HOST:?e.g. portal.ztna.sc.deeptrustxai.com}
+      ZTCP_PUBLIC_SCHEME: ${ZTCP_PUBLIC_SCHEME:-https}
+      ZTCP_PORTAL_BASE_URL: ${ZTCP_PORTAL_BASE_URL:-https://portal.ztna.sc.deeptrustxai.com}
+      ZTCP_DOMAIN: ${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com}
+      ZTCP_APPLY: ${ZTCP_APPLY:-false}
+      ZTCP_CONFIRM: ${ZTCP_CONFIRM:-}
+
+      # Non-secret endpoint configuration (override via Dokploy Environment).
+      ZTCP_KEYCLOAK_ORIGIN: ${ZTCP_KEYCLOAK_ORIGIN:-https://auth.ztna.sc.deeptrustxai.com}
+      ZTCP_KEYCLOAK_ADMIN_REALM: ${ZTCP_KEYCLOAK_ADMIN_REALM:-master}
+      ZTCP_KEYCLOAK_ADMIN_USER: ${ZTCP_KEYCLOAK_ADMIN_USER:-admin}
+      ZTCP_KEYCLOAK_PASSWORD_ENV: ${ZTCP_KEYCLOAK_PASSWORD_ENV:-ZTCP_KEYCLOAK_ADMIN_PASSWORD}
+      ZTCP_POSTGRES_HOST: ${ZTCP_POSTGRES_HOST:-ztna-zetrissinglenode-fcrups-postgres-1}
+      ZTCP_POSTGRES_CONTAINER_HOST: ${ZTCP_POSTGRES_CONTAINER_HOST:-ztna-zetrissinglenode-fcrups-postgres-1}
+      ZTCP_POSTGRES_PORT: ${ZTCP_POSTGRES_PORT:-5432}
+      ZTCP_POSTGRES_ADMIN_USER: ${ZTCP_POSTGRES_ADMIN_USER:-admin}
+      ZTCP_POSTGRES_PASSWORD_ENV: ${ZTCP_POSTGRES_PASSWORD_ENV:-PGPASSWORD}
+      ZTCP_CLICKHOUSE_ORIGIN: ${ZTCP_CLICKHOUSE_ORIGIN:-https://ztna-zetrissinglenode-fcrups-clickhouse-1:8443}
+      ZTCP_CLICKHOUSE_ADMIN_USER: ${ZTCP_CLICKHOUSE_ADMIN_USER:-default}
+      ZTCP_CLICKHOUSE_PASSWORD_ENV: ${ZTCP_CLICKHOUSE_PASSWORD_ENV:-ZTCP_CH_ADMIN_PASSWORD}
+      ZTCP_REDIS_HOST: ${ZTCP_REDIS_HOST:-ztna-zetrissinglenode-fcrups-redis-1}
+      ZTCP_REDIS_PORT: ${ZTCP_REDIS_PORT:-6380}
+      ZTCP_REDIS_PASSWORD_ENV: ${ZTCP_REDIS_PASSWORD_ENV:-ZTCP_REDIS_ADMIN_PASSWORD}
+      ZTCP_DATABASE_NETWORK: ${ZTCP_DATABASE_NETWORK:-ztna-zetrissinglenode-fcrups_netbird-db}
+      ZTCP_API_NETWORK: ${ZTCP_API_NETWORK:-ztna-zetrissinglenode-fcrups_access}
+      ZTCP_BACKEND_NETWORK: ${ZTCP_BACKEND_NETWORK:-ztna-zetrissinglenode-fcrups_data}
+      ZTCP_POLICY_VOLUME: ${ZTCP_POLICY_VOLUME:-ztna-zetrissinglenode-fcrups_policies}
+      ZTCP_GATEWAY_IP: ${ZTCP_GATEWAY_IP:-100.64.0.10}
+      ZTCP_EDGE_HOST: ${ZTCP_EDGE_HOST:-ztna-zetrissinglenode-fcrups-edge-1}
+      ZTCP_ROUTE_VOLUME: ${ZTCP_ROUTE_VOLUME:-zetris-control-plane_ztcp-routes}
+      ZTCP_GATEWAY_CONTAINER: ${ZTCP_GATEWAY_CONTAINER:-zetris-control-plane-tenant-gateway-1}
+      ZTCP_CA_FILE: ${ZTCP_CA_FILE:-/app/config/lab-ca.crt}
+      ZTCP_NETBIRD_TOKEN_ENV: ${ZTCP_NETBIRD_TOKEN_ENV:-ZTCP_ADMIN_TOKEN}
+      ZTCP_LAB: ${ZTCP_LAB:-false}
+
+      # Pass-through of secret values by NAME only. Values are entered in
+      # Dokploy's Environment tab; this file never contains them.
+      PGPASSWORD: ${PGPASSWORD:-}
+      ZTCP_KEYCLOAK_ADMIN_PASSWORD: ${ZTCP_KEYCLOAK_ADMIN_PASSWORD:-}
+      ZTCP_CH_ADMIN_PASSWORD: ${ZTCP_CH_ADMIN_PASSWORD:-}
+      ZTCP_REDIS_ADMIN_PASSWORD: ${ZTCP_REDIS_ADMIN_PASSWORD:-}
+      ZTCP_ADMIN_TOKEN: ${ZTCP_ADMIN_TOKEN:-}
+
+    volumes:
+      # Needed only for guarded apply: tenant compose projects start on the host.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ztcp-state:/app/state
+      - ztcp-provisioned:/app/provisioned
+
+    ports:
+      - "8788:8788"
+
+    networks:
+      - proxy
+
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ztcp.rule=Host(`portal.${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com}`)
+      - traefik.http.routers.ztcp.entrypoints=websecure
+      - traefik.http.routers.ztcp.tls=true
+      - traefik.http.routers.ztcp.tls.certresolver=letsencrypt
+      - traefik.http.services.ztcp.loadbalancer.server.port=8788
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ztcp-state:
+  ztcp-provisioned:
+  ztcp-routes:
+
+networks:
+  proxy:
+    external: true
+    name: ${ZTCP_TRAEFIK_NETWORK:-dokploy-network}

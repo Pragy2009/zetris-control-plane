@@ -1,0 +1,8 @@
+{
+  "server_version": "0.80.0",
+  "dashboard_version": "2.94.0",
+  "client_version": "0.80.0",
+  "server_image": "netbirdio/netbird-server:0.80.0@sha256:05b3d8d6d056e5062a2965d4d6e5d6d83f09f2bf9133947a8e5972e0e0e7a261",
+  "dashboard_image": "netbirdio/dashboard:v2.94.0@sha256:70e0fc6dd3b7758148d182fb55ecd8d4f9ce01e9bba56c9389224e0b8354009d",
+  "client_image": "netbirdio/netbird:0.80.0@sha256:4976692ea44bb93871743d0b742b4a8f97f6425bfc458ca2d78e28fdb8bdf4ad"
+}

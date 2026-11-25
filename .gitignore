@@ -1,0 +1,8 @@
+# Ephemeral preview material: throwaway keys and rendered tenant files.
+provisioned/
+state/
+__pycache__/
+*.pyc
+config/registry.local.json
+*.key
+*.crt

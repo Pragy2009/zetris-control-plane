@@ -1,0 +1,11 @@
+{
+	admin off
+	auto_https off
+	servers :80 {
+		protocols h1 h2c
+	}
+}
+
+# Per-tenant site blocks are generated into /etc/caddy/tenants/*.caddy
+# by the control plane and hot-loaded with `caddy reload`.
+import /etc/caddy/tenants/*.caddy

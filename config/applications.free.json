@@ -1,0 +1,243 @@
+{
+  "model_version": 1,
+  "applications": [
+    {
+      "id": "workspace",
+      "resource_kinds": [
+        "workspace"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "tenant-http"
+      ]
+    },
+    {
+      "id": "developer-app",
+      "resource_kinds": [
+        "developer_app"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "tenant-http"
+      ]
+    },
+    {
+      "id": "admin-console",
+      "resource_kinds": [
+        "admin_console"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "tenant-http",
+        "privileged"
+      ]
+    },
+    {
+      "id": "diagnostics",
+      "resource_kinds": [
+        "diagnostics"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "tenant-http",
+        "privileged"
+      ]
+    },
+    {
+      "id": "files",
+      "resource_kinds": [
+        "file"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "tenant-http",
+        "privileged"
+      ]
+    },
+    {
+      "id": "demo-control",
+      "resource_kinds": [
+        "simulation_control"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "tenant-http",
+        "privileged"
+      ]
+    },
+    {
+      "id": "simulation-probes",
+      "resource_kinds": [
+        "simulation_probe"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "synthetic"
+      ]
+    },
+    {
+      "id": "documents-contract",
+      "resource_kinds": [
+        "document"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "tenant-http"
+      ]
+    },
+    {
+      "id": "administration-contract",
+      "resource_kinds": [
+        "export",
+        "tenant_users",
+        "policy",
+        "session"
+      ],
+      "destinations": [
+        "$APP_HOST"
+      ],
+      "ports": [
+        443
+      ],
+      "protocol": "tcp",
+      "groups": [
+        "tenant-http",
+        "privileged"
+      ]
+    }
+  ],
+  "access_rules": [
+    {
+      "id": "bound-simulator-probes",
+      "priority": 10,
+      "enabled": true,
+      "applications": [
+        "simulation-probes"
+      ],
+      "application_groups": [],
+      "when": {
+        "field": "identity.kind",
+        "op": "eq",
+        "value": "simulator"
+      },
+      "action": "allow"
+    },
+    {
+      "id": "human-application-access",
+      "priority": 100,
+      "enabled": true,
+      "applications": [],
+      "application_groups": [
+        "tenant-http"
+      ],
+      "when": {
+        "all": [
+          {
+            "field": "identity.kind",
+            "op": "eq",
+            "value": "human"
+          },
+          {
+            "field": "identity.roles",
+            "op": "contains_any",
+            "value": [
+              "viewer",
+              "developer",
+              "tenant_admin",
+              "platform_operator"
+            ]
+          }
+        ]
+      },
+      "action": "allow"
+    }
+  ],
+  "timeout_rules": [
+    {
+      "id": "privileged-short-session",
+      "priority": 10,
+      "enabled": true,
+      "applications": [],
+      "application_groups": [
+        "privileged"
+      ],
+      "timeouts": {
+        "reauth_seconds": 900,
+        "idle_seconds": 120,
+        "max_session_seconds": 900
+      }
+    },
+    {
+      "id": "document-delete-short-session",
+      "priority": 20,
+      "enabled": true,
+      "applications": [
+        "documents-contract"
+      ],
+      "application_groups": [],
+      "when": {
+        "field": "resource.action",
+        "op": "eq",
+        "value": "delete"
+      },
+      "timeouts": {
+        "reauth_seconds": 900,
+        "idle_seconds": 120,
+        "max_session_seconds": 900
+      }
+    }
+  ],
+  "default_timeouts": {
+    "reauth_seconds": 28800,
+    "idle_seconds": 900,
+    "max_session_seconds": 3600
+  }
+}

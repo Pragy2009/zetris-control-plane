@@ -1,0 +1,424 @@
+# Architecture:
+#   Browser → TLS :443 → oauth2 → jwt_authn → ext_authz(gRPC opa-sidecar:9191) → router → demo-backend:80
+#   API/headless clients ([REDACTED:bearer-auth:10] in Authorization header) skip the oauth2
+#   login gate via pass_through_matcher → jwt_authn validates the token instead.
+# G3: this container lives on the isolated ztna-mesh bridge; 0.0.0.0 here is container-internal only.
+# Host exposure is restricted to the NetBird mesh IP by the compose port mapping (WT0_IP:443:443),
+# which fails fast when WT0_IP is unset.
+
+static_resources:
+  secrets: # these should keep being rotated — values injected from env by entrypoint.sh
+  - name: token
+    generic_secret:
+      secret:
+        inline_string: "${OAUTH2_TOKEN_SECRET}"
+  - name: hmac
+    generic_secret:
+      secret:
+        inline_string: "${OAUTH2_HMAC_SECRET}"
+  listeners:
+  - name: ingress_https
+    address:
+      socket_address:
+        address: 0.0.0.0  # container-internal (bridge); host exposure capped by compose WT0_IP mapping
+        port_value: 443
+    filter_chains:
+    - transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            alpn_protocols: ["h2", "http/1.1"]
+            tls_certificates:
+            - certificate_chain: { filename: "/etc/envoy/certs/server.crt" }
+              private_key: { filename: "/etc/envoy/certs/server.key" }
+      filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          use_remote_address: true
+          xff_num_trusted_hops: 0
+          stat_prefix: ingress_https
+          access_log:
+          - name: envoy.access_loggers.file
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+              path: "/var/log/envoy/access.log"
+              log_format:
+                json_format:
+                  user_id: "%DYNAMIC_METADATA(zetris.identity:user)%"
+                  session_id: "%DYNAMIC_METADATA(zetris.identity:session)%"
+                  tenant_id: "%DYNAMIC_METADATA(zetris.identity:tenant)%"
+                  request_path: "%DYNAMIC_METADATA(zetris.access:path)%"
+                  response_code: "%RESPONSE_CODE%"
+                  response_flags: "%RESPONSE_FLAGS%"
+                  source_ip: "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%"
+                  timestamp: "%START_TIME%"
+                  duration_ms: "%DURATION%"
+                  method: "%REQ(:METHOD)%"
+                  upstream_host: "%UPSTREAM_HOST%"
+                  access_policy_version: "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:access_policy_version)%"
+                  access_policy_reasons: "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:access_policy_reasons)%"
+                  access_policy_action: "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:access_policy_action)%"
+                  access_policy_application: "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:access_policy_application)%"
+                  access_policy_access_rule: "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:access_policy_access_rule)%"
+                  access_policy_timeout_rule: "%DYNAMIC_METADATA(envoy.filters.http.ext_authz:access_policy_timeout_rule)%"
+          http_filters:
+          # Logout is gateway-owned, before authentication/authorization. A
+          # denied or expired session must still be able to clear its cookies.
+          # Only these exact paths on this tenant's host terminate here.
+          - name: envoy.filters.http.lua
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+              default_source_code:
+                inline_string: |
+                  local app_host = "${VIRTUAL_HOST:-app.ztnaiitm.me}"
+                  local issuer = "${KEYCLOAK_ISSUER:-https://auth.ztnaiitm.me/realms/ztna}"
+                  local client_id = "${OAUTH2_CLIENT_ID:-node2-app-connector}"
+                  local function encode(value)
+                    return (value:gsub("([^%w%-%._~])", function(c)
+                      return string.format("%%%02X", string.byte(c))
+                    end))
+                  end
+                  local function expired_cookies()
+                    local result = {}
+                    for _, name in ipairs({"BearerToken", "OauthHMAC", "OauthExpires", "IdToken", "RefreshToken"}) do
+                      table.insert(result, name .. "=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; HttpOnly; SameSite=Lax")
+                    end
+                    return result
+                  end
+                  function envoy_on_request(handle)
+                    local headers = handle:headers()
+                    -- Client identity headers are never an authentication source.
+                    -- This runs before OAuth/JWT can reject a request or redirect.
+                    headers:remove("x-current-user")
+                    headers:remove("x-session-id")
+                    headers:remove("x-tenant-id")
+                    handle:streamInfo():dynamicMetadata():set("zetris.access", "path", (headers:get(":path") or ""):match("^[^?]*"))
+                    local authority = string.lower(headers:get(":authority") or "")
+                    if authority ~= string.lower(app_host) and authority ~= string.lower(app_host .. ":443") then
+                      return
+                    end
+                    local path = (headers:get(":path") or ""):match("^[^?]*")
+                    if path ~= "/signout" and path ~= "/oauth2/signout" and path ~= "/signed-out" then
+                      return
+                    end
+                    local method = headers:get(":method")
+                    if method ~= "GET" and method ~= "HEAD" then
+                      handle:respond({[":status"]="405", ["allow"]="GET, HEAD", ["cache-control"]="no-store"}, "Method not allowed")
+                      return
+                    end
+                    local response = {
+                      ["cache-control"]="no-store, max-age=0",
+                      ["pragma"]="no-cache",
+                      ["referrer-policy"]="no-referrer",
+                      ["x-content-type-options"]="nosniff",
+                      ["set-cookie"]=expired_cookies()
+                    }
+                    if path == "/signed-out" then
+                      response[":status"] = "200"
+                      response["content-type"] = "text/html; charset=utf-8"
+                      response["content-security-policy"] = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+                      local body = [[<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signed out - Zetris</title></head><body><main><h1>You are signed out</h1><p>Your Zetris gateway session has been cleared.</p><p><a href="/juice/">Sign in</a></p></main></body></html>]]
+                      handle:respond(response, method == "HEAD" and "" or body)
+                      return
+                    end
+                    local logout = issuer .. "/protocol/openid-connect/logout?client_id=" .. encode(client_id)
+                      .. "&post_logout_redirect_uri=" .. encode("https://" .. app_host .. "/signed-out")
+                    -- Keycloak validates this hint. Never log it or use an
+                    -- access token in its place. Without a hint it may show
+                    -- its normal logout confirmation page.
+                    local cookie = headers:get("cookie") or ""
+                    local hint = ("; " .. cookie):match(";%s*IdToken=([^;]+)")
+                    if hint and #hint <= 16384 and hint:match("^[%w_-]+%.[%w_-]+%.[%w_-]+$") then
+                      logout = logout .. "&id_token_hint=" .. encode(hint)
+                    end
+                    response[":status"] = "302"
+                    response["location"] = logout
+                    handle:respond(response, "")
+                  end
+
+          - name: envoy.filters.http.cors
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
+
+          - name: envoy.filters.http.oauth2
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.oauth2.v3.OAuth2
+              config:
+                token_endpoint:
+                  cluster: keycloak
+                  uri: ${KEYCLOAK_ISSUER:-https://auth.ztnaiitm.me/realms/ztna}/protocol/openid-connect/token
+                  timeout: 5s
+                authorization_endpoint: ${KEYCLOAK_ISSUER:-https://auth.ztnaiitm.me/realms/ztna}/protocol/openid-connect/auth
+                redirect_uri: "https://%REQ(:authority)%/oauth2/callback"
+                redirect_path_matcher:
+                  path:
+                    exact: /oauth2/callback
+                signout_path:
+                  path:
+                    exact: /oauth2/signout
+                credentials:
+                  client_id: "${OAUTH2_CLIENT_ID:-node2-app-connector}"
+                  token_secret:
+                    name: token
+                  hmac_secret:
+                    name: hmac
+                forward_bearer_token: true
+                auth_scopes:
+                - openid
+                - offline_access
+                use_refresh_token: true
+                pass_through_matcher:
+                - name: authorization
+                  prefix_match: "Bearer "
+
+          - name: envoy.filters.http.jwt_authn
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
+              providers:
+                keycloak:
+                  issuer: "${KEYCLOAK_ISSUER:-https://auth.ztnaiitm.me/realms/ztna}"
+                  # envoy-proxy: Keycloak client used by API/headless test clients
+                  # (tokens carry aud=envoy-proxy). Committed here so restarts
+                  # never silently drop Bearer-client access again.
+                  audiences: ["${OAUTH2_CLIENT_ID:-node2-app-connector}", "envoy-proxy"]
+                  from_headers:
+                  - name: Authorization
+                    value_prefix: "Bearer "
+                  from_cookies:
+                  - BearerToken
+                  remote_jwks:
+                    http_uri:
+                      uri: "${KEYCLOAK_ISSUER:-https://auth.ztnaiitm.me/realms/ztna}/protocol/openid-connect/certs"
+                      cluster: keycloak
+                      timeout: 5s
+                    cache_duration:
+                      seconds: 300
+                  forward: true
+                  payload_in_metadata: jwt_payload
+              rules:
+              - match: { prefix: "/" }
+                requires:
+                  provider_name: "keycloak"
+
+          # Only successfully verified JWT metadata may attribute telemetry.
+          # Keep the same session preference as the OPA sidecar, including
+          # service tokens without a Keycloak browser session claim.
+          - name: zetris.verified_identity
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+              default_source_code:
+                inline_string: |
+                  local function first_string(...)
+                    for _, value in ipairs({...}) do
+                      if type(value) == "string" and value ~= "" then return value end
+                    end
+                    return nil
+                  end
+                  function envoy_on_request(handle)
+                    local metadata = handle:streamInfo():dynamicMetadata()
+                    local verified = metadata:get("envoy.filters.http.jwt_authn") or {}
+                    local payload = verified.jwt_payload
+                    if type(payload) ~= "table" then return end
+                    local session = first_string(payload.session_state or "", payload.sid or "", payload.sub or "")
+                    if payload.azp == "zetris-risk-simulator" and payload.preferred_username == "service-account-zetris-risk-simulator" then
+                      local run = handle:headers():get("x-zetris-demo-run") or ""
+                      local function uuid(value)
+                        return type(value) == "string" and #value == 36 and value:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") and value == value:lower()
+                      end
+                      if not uuid(run) or not uuid(payload.sub) then return end
+                      session = "sim-" .. payload.sub .. "-" .. run
+                    end
+                    -- Score owns sessions by immutable JWT subject, not the
+                    -- mutable display name carried to application backends.
+                    local user = first_string(payload.sub or "")
+                    local tenant = type(payload.iss) == "string" and payload.iss:match("/realms/([%w_-]+)$") or nil
+                    if session then metadata:set("zetris.identity", "session", session) end
+                    if user then metadata:set("zetris.identity", "user", user) end
+                    if tenant then metadata:set("zetris.identity", "tenant", tenant) end
+                  end
+
+          - name: envoy.filters.http.ext_authz
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+              transport_api_version: V3
+              metadata_context_namespaces: ["envoy.filters.http.jwt_authn"]
+              grpc_service:
+                envoy_grpc:
+                  cluster_name: local_opa_sidecar
+              with_request_body:
+                max_request_bytes: 8192
+                pack_as_bytes: true
+              failure_mode_allow: false
+
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: backend
+              domains: ["${VIRTUAL_HOST:-app.ztnaiitm.me}", "${VIRTUAL_HOST:-app.ztnaiitm.me}:443", "localhost", "localhost:8443"]
+              cors:
+                allow_origin_string_match:
+                - prefix: "${CORS_ORIGIN:-https://app.ztnaiitm.me}"
+                allow_methods: GET,POST,PUT,DELETE,OPTIONS
+                allow_headers: authorization,content-type,x-session-id,x-current-user,x-tenant-id
+                max_age: "3600"
+              routes:
+              # Navigation-only redirects: oauth2 and jwt_authn still run.
+              # Skip OPA only on these exact redirects (no backend is served);
+              # the /juice/ destination always receives its normal policy check.
+              - name: workspace_landing
+                match:
+                  path: "/"
+                  headers:
+                  - name: ":method"
+                    string_match:
+                      safe_regex: { google_re2: {}, regex: "GET|HEAD" }
+                redirect:
+                  path_redirect: "/juice/"
+                  response_code: FOUND
+                  strip_query: true
+                typed_per_filter_config:
+                  envoy.filters.http.ext_authz:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+                    disabled: true
+                response_headers_to_add:
+                - header: { key: "Cache-Control", value: "no-store" }
+                  append_action: OVERWRITE_IF_EXISTS_OR_ADD
+              - name: workspace_trailing_slash
+                match:
+                  path: "/juice"
+                  headers:
+                  - name: ":method"
+                    string_match:
+                      safe_regex: { google_re2: {}, regex: "GET|HEAD" }
+                redirect:
+                  path_redirect: "/juice/"
+                  response_code: FOUND
+                  strip_query: true
+                typed_per_filter_config:
+                  envoy.filters.http.ext_authz:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+                    disabled: true
+                response_headers_to_add:
+                - header: { key: "Cache-Control", value: "no-store" }
+                  append_action: OVERWRITE_IF_EXISTS_OR_ADD
+              # Authenticated responses must never be cached by the browser:
+              # a cached admin-fetched page would otherwise render for the next
+              # user (e.g. dev) without any live policy decision.
+              - match: { prefix: "/juice/" }
+                route:
+                  cluster: juice_shop_cluster
+                  prefix_rewrite: "/"
+                response_headers_to_add:
+                - header: { key: "Cache-Control", value: "no-store" }
+                  append_action: OVERWRITE_IF_EXISTS_OR_ADD
+              - match: { prefix: "/dummy/" }
+                route:
+                  cluster: dummy_backend_cluster
+                  prefix_rewrite: "/"
+                  timeout: 0s
+                response_headers_to_add:
+                - header: { key: "Cache-Control", value: "no-store" }
+                  append_action: OVERWRITE_IF_EXISTS_OR_ADD
+              - match: { prefix: "/demo/" }
+                route:
+                  cluster: demo_backend_cluster
+                  prefix_rewrite: "/"
+                  timeout: 0s
+                response_headers_to_add:
+                - header: { key: "Cache-Control", value: "no-store" }
+                  append_action: OVERWRITE_IF_EXISTS_OR_ADD
+              - match: { prefix: "/" }
+                route: { cluster: juice_shop_cluster }
+
+  clusters:
+  - name: local_opa_sidecar
+    type: LOGICAL_DNS
+    connect_timeout: 0.25s
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http2_protocol_options: {}
+    load_assignment:
+      cluster_name: local_opa_sidecar
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: opa-sidecar
+                port_value: 9191
+
+  - name: dummy_backend_cluster
+    type: LOGICAL_DNS
+    connect_timeout: 0.25s
+    load_assignment:
+      cluster_name: dummy_backend_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: dummy-backend
+                port_value: 80
+
+  - name: demo_backend_cluster
+    type: LOGICAL_DNS
+    connect_timeout: 0.25s
+    load_assignment:
+      cluster_name: demo_backend_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: demo-backend
+                port_value: 80
+
+  - name: juice_shop_cluster
+    type: LOGICAL_DNS
+    connect_timeout: 0.25s
+    load_assignment:
+      cluster_name: juice_shop_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: juice-shop
+                port_value: 3000
+
+  - name: keycloak
+    connect_timeout: 5s
+    type: LOGICAL_DNS
+    dns_lookup_family: V4_ONLY
+    load_assignment:
+      cluster_name: keycloak
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: ${KEYCLOAK_HOST:-auth.ztnaiitm.me}
+                port_value: 443
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: ${KEYCLOAK_HOST:-auth.ztnaiitm.me}
+        common_tls_context:
+          validation_context:
+            trusted_ca:
+              filename: /etc/ssl/certs/ca-certificates.crt
+
+admin:
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: 9901
