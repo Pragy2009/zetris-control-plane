@@ -20,13 +20,14 @@ services:
             protocols h1 h2c
           }
         }
-        # Fallback: if Traefik still sends portal.* here, proxy it to the app.
-        # $$ escapes Compose interpolation; the shell expands it at runtime.
-        portal.$${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com} {
+        # Caddy's own env syntax. The quoted heredoc above means the shell
+        # cannot expand variables, so Caddy must read ZTCP_DOMAIN itself.
+        portal.{$ZTCP_DOMAIN:ztna.sc.deeptrustxai.com} {
           reverse_proxy control-plane:8788
         }
         import /etc/caddy/tenants/*.caddy
         EOF
+        printf '# placeholder\n' > /etc/caddy/tenants/placeholder.caddy
         exec caddy run --config /etc/caddy/Caddyfile
     volumes:
       - ztcp-routes:/etc/caddy/tenants
