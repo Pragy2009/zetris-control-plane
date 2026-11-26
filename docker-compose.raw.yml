@@ -20,9 +20,9 @@ services:
             protocols h1 h2c
           }
         }
-        # Caddy's own env syntax. The quoted heredoc above means the shell
-        # cannot expand variables, so Caddy must read ZTCP_DOMAIN itself.
-        portal.{$ZTCP_DOMAIN:ztna.sc.deeptrustxai.com} {
+        # Hardcoded confirmed portal hostname. No Compose/shell interpolation:
+        # a quoted heredoc plus Compose variables produced an invalid Caddy key.
+        portal.ztna.sc.deeptrustxai.com {
           reverse_proxy control-plane:8788
         }
         import /etc/caddy/tenants/*.caddy
