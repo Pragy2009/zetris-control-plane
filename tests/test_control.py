@@ -235,6 +235,10 @@ class FinalSliceTests(unittest.TestCase):
 
 
 class RouteSchemeTests(unittest.TestCase):
+    def test_raw_gateway_has_catch_all(self):
+        compose = (ROOT / "docker-compose.raw.yml").read_text(encoding="utf-8")
+        self.assertIn(":80 {\n          reverse_proxy control-plane:8788\n        }", compose)
+
     def test_http_site_forces_port_80(self):
         from control import steps as stp
         self.assertEqual(stp._http_site("https://a.example.com {\n}\n"),

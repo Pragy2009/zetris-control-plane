@@ -20,9 +20,10 @@ services:
             protocols h1 h2c
           }
         }
-        # Hardcoded confirmed portal hostname. No Compose/shell interpolation:
-        # a quoted heredoc plus Compose variables produced an invalid Caddy key.
-        http://portal.ztna.sc.deeptrustxai.com {
+        # Catch-all on :80. Tenant-specific http://<host> site blocks are more
+        # specific and win over this. Anything else (including portal.*) goes
+        # to the control plane, so Caddy can never return its default 404.
+        :80 {
           reverse_proxy control-plane:8788
         }
         import /etc/caddy/tenants/*.caddy
