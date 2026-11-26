@@ -3,6 +3,7 @@ name: zetris-control-plane
 # RAW PROVIDER VERSION — no Git provider and no source-fetch container.
 # control-plane clones the public repo into /app at startup.
 # State, provisioned tenant data, and tenant routes stay in persistent volumes.
+# code refresh: 3d2d9ff (direct host:port access)
 
 services:
   tenant-gateway:
