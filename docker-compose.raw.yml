@@ -20,6 +20,11 @@ services:
             protocols h1 h2c
           }
         }
+        # Fallback: if Traefik still sends portal.* here, proxy it to the app.
+        # $$ escapes Compose interpolation; the shell expands it at runtime.
+        portal.$${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com} {
+          reverse_proxy control-plane:8788
+        }
         import /etc/caddy/tenants/*.caddy
         EOF
         exec caddy run --config /etc/caddy/Caddyfile
