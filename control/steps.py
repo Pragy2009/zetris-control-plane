@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import subprocess
@@ -286,6 +287,11 @@ def step_audit_stack(ctx: Context):
     return "audit console (with Decision Explorer) rendered and started"
 
 
+def _http_site(text: str) -> str:
+    """Force the site address to plain HTTP so Caddy listens on :80 behind Traefik."""
+    return re.sub(r"(?m)^(?:https://)?([a-z0-9.-]+)(\s*\{)", r"http://\1\2", text, count=1)
+
+
 def step_routes(ctx: Context):
     """Install hostname routes on the tenant gateway (Traefik → Caddy → edge)."""
     edge = ctx.config.get("edge_host", "zetris-single-node-edge-1")
@@ -298,17 +304,17 @@ def step_routes(ctx: Context):
                             "h2c://" + edge + ":8081")
         text = text.replace("127.0.0.1:" + str(ctx.tenant["management_port"]), edge + ":8081")
         text = text.replace("127.0.0.1:" + str(ctx.tenant["dashboard_port"]), edge + ":8081")
-        generated.append((ctx.tenant["id"] + "-netbird.caddy", text))
+        generated.append((ctx.tenant["id"] + "-netbird.caddy", _http_site(text)))
 
     audit = ctx.out_dir / "audit/Caddyfile.snippet"
     if audit.is_file():
         text = audit.read_text(encoding="utf-8")
         text = text.replace("127.0.0.1:" + str(ctx.tenant["audit_port"]), edge + ":8082")
-        generated.append((ctx.tenant["id"] + "-audit.caddy", text))
+        generated.append((ctx.tenant["id"] + "-audit.caddy", _http_site(text)))
 
     app_host = ctx.tenant["application_host"]
     generated.append((ctx.tenant["id"] + "-app.caddy",
-                      app_host + " {\n    reverse_proxy " + edge + ":8083\n}\n"))
+                      "http://" + app_host + " {\n    reverse_proxy " + edge + ":8083\n}\n"))
 
     for name, text in generated:
         ctx.runner.write(ctx.out_dir / "routes" / name, text)

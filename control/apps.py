@@ -59,7 +59,7 @@ def add_app(ctx: Context, payload):
     ctx.runner.write(ctx.out_dir / "policy" / ctx.tenant["policy_file"], rego)
 
     edge = ctx.config.get("edge_host", "zetris-single-node-edge-1")
-    snippet = host + " {\n    reverse_proxy " + edge + ":8083\n}\n"
+    snippet = "http://" + host + " {\n    reverse_proxy " + edge + ":8083\n}\n"
     ctx.runner.write(ctx.out_dir / "routes" / (ctx.tenant["id"] + "-app-" + app_id + ".caddy"), snippet)
 
     ctx.runner.command([

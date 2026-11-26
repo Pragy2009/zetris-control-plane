@@ -22,7 +22,7 @@ services:
         }
         # Hardcoded confirmed portal hostname. No Compose/shell interpolation:
         # a quoted heredoc plus Compose variables produced an invalid Caddy key.
-        portal.ztna.sc.deeptrustxai.com {
+        http://portal.ztna.sc.deeptrustxai.com {
           reverse_proxy control-plane:8788
         }
         import /etc/caddy/tenants/*.caddy

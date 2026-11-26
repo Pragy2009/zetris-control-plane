@@ -234,6 +234,15 @@ class FinalSliceTests(unittest.TestCase):
         self.assertTrue(all(item["status"] == "pass" for item in results), results)
 
 
+class RouteSchemeTests(unittest.TestCase):
+    def test_http_site_forces_port_80(self):
+        from control import steps as stp
+        self.assertEqual(stp._http_site("https://a.example.com {\n}\n"),
+                         "http://a.example.com {\n}\n")
+        self.assertEqual(stp._http_site("a.example.com {\n}\n"),
+                         "http://a.example.com {\n}\n")
+
+
 class TokenStorageTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir=ROOT)
