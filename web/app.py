@@ -624,6 +624,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+    def host_matches(self):
+        """Accept Host with or without :port, and either http/https Origin.
+
+        This lets the app work behind Traefik (no port, https) or directly via
+        the published port (http://host:8788) when no proxy is available.
+        """
+        host = (self.headers.get("Host") or "").split(":", 1)[0]
+        return host == self.server.allowed_host.split(":", 1)[0]
+
     def authenticated(self):
         token = self.server.service.operator_token
         if not token:
@@ -658,7 +667,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            if self.headers.get("Host") != self.server.allowed_host:
+            if not self.host_matches():
                 return self.respond(403, {"error": "unexpected host"})
             path = self.path.split("?")[0]
             if path.startswith("/handoff/"):
@@ -715,9 +724,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            scheme = os.environ.get("ZTCP_PUBLIC_SCHEME", "http")
-            origin = scheme + "://" + self.server.allowed_host
-            if self.headers.get("Host") != self.server.allowed_host or self.headers.get("Origin") != origin:
+            if not self.host_matches():
+                return self.respond(403, {"error": "unexpected host"})
+            origin = urlparse(self.headers.get("Origin") or "")
+            if origin.hostname != self.server.allowed_host.split(":", 1)[0] or \
+                    origin.scheme not in ("http", "https"):
                 return self.respond(403, {"error": "unexpected origin"})
             path = self.path.split("?")[0]
             data = self.body()

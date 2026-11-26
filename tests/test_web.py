@@ -68,6 +68,14 @@ class WebTests(unittest.TestCase):
         self.assertEqual(status, 200, session)
         self.assertTrue(session["authenticated"])
 
+    def test_direct_port_host_is_accepted(self):
+        self.server.allowed_host = "portal.example.test"
+        req = urllib.request.Request(self.base + "/healthz",
+                                     headers={"Host": "portal.example.test:8788"})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            self.assertEqual(response.status, 200)
+        self.server.allowed_host = "127.0.0.1:" + str(self.server.server_port)
+
     def test_health_and_signup(self):
         self.assertEqual(self.call("/healthz")[0], 200)
         status, body = self.call("/api/signup", {"slug": "canary", "email": "admin@canary.test", "tier": "free"})
