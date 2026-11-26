@@ -134,7 +134,7 @@ services:
       - proxy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.ztcp.rule=Host(`portal.${ZTCP_DOMAIN:-ztna.sc.deeptrustxai.com}`)
+      - traefik.http.routers.ztcp.rule=Host(`${ZTCP_PUBLIC_HOST:?set ZTCP_PUBLIC_HOST}`)
       - traefik.http.routers.ztcp.entrypoints=websecure
       - traefik.http.routers.ztcp.tls=true
       - traefik.http.routers.ztcp.tls.certresolver=letsencrypt
